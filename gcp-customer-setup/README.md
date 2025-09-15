@@ -9,7 +9,7 @@
 
 ---
 
-## 📋 주요 기능
+## 주요 기능
 - 현재 GCP 프로젝트 확인 및 권한 검증
 - 필요한 GCP API 자동 활성화
 - Crossplane 전용 Service Account 자동 생성
@@ -20,7 +20,7 @@
 
 ---
 
-## ⚙️ 요구사항
+## 요구사항
 1. [Google Cloud SDK (gcloud CLI)](https://cloud.google.com/sdk/docs/install) 설치 및 로그인 완료
    ```bash
    gcloud auth login
