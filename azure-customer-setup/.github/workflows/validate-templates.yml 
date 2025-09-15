@@ -1,0 +1,159 @@
+name: Validate ARM Templates
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+jobs:
+  validate-arm-template:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Validate ARM Template Syntax
+      run: |
+        az deployment group validate \
+          --resource-group validation-rg \
+          --template-file azuredeploy.json \
+          --parameters servicePrincipalObjectId="00000000-0000-0000-0000-000000000000" \
+                      applicationClientId="00000000-0000-0000-0000-000000000000"
+    
+    - name: Run ARM Template Security Scan
+      uses: azure/arm-template-security-scan@v1
+      with:
+        template-file: azuredeploy.json
+        
+    - name: Test ARM Template with ARM-TTK
+      run: |
+        # Install ARM Template Toolkit
+        git clone https://github.com/Azure/arm-ttk.git
+        
+        # Run tests
+        Import-Module ./arm-ttk/arm-ttk/arm-ttk.psd1
+        Test-AzTemplate -TemplatePath ./azuredeploy.json
+      shell: pwsh
+      
+  validate-scripts:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install ShellCheck
+      run: sudo apt-get install shellcheck
+      
+    - name: Validate Bash Script
+      run: |
+        shellcheck setup-platform-access.sh
+        
+    - name: Install PSScriptAnalyzer
+      run: |
+        Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+      shell: pwsh
+      
+    - name: Validate PowerShell Script
+      run: |
+        Invoke-ScriptAnalyzer -Path ./setup-platform-access.ps1 -Recurse
+      shell: pwsh
+      
+  test-deployment:
+    runs-on: ubuntu-latest
+    needs: [validate-arm-template, validate-scripts]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Create Test Resource Group
+      run: |
+        RG_NAME="test-platform-setup-$(date +%Y%m%d%H%M%S)"
+        echo "RESOURCE_GROUP_NAME=$RG_NAME" >> $GITHUB_ENV
+        az group create --name "$RG_NAME" --location "Korea Central"
+        
+    - name: Test ARM Template Deployment
+      run: |
+        az deployment group create \
+          --resource-group "$RESOURCE_GROUP_NAME" \
+          --name "test-deployment-$(date +%Y%m%d%H%M%S)" \
+          --template-file azuredeploy.json \
+          --parameters servicePrincipalObjectId="${{ secrets.TEST_SERVICE_PRINCIPAL_OBJECT_ID }}" \
+                      applicationClientId="${{ secrets.TEST_APPLICATION_CLIENT_ID }}" \
+          --what-if
+          
+    - name: Clean Up Test Resources
+      if: always()
+      run: |
+        if [ ! -z "$RESOURCE_GROUP_NAME" ]; then
+          az group delete --name "$RESOURCE_GROUP_NAME" --yes --no-wait
+        fi
+        
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+        
+  generate-docs:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Generate ARM Template Documentation
+      run: |
+        # ARM Template 문서 생성 스크립트
+        echo "# ARM Template Documentation" > ARM_TEMPLATE_DOCS.md
+        echo "" >> ARM_TEMPLATE_DOCS.md
+        echo "## Parameters" >> ARM_TEMPLATE_DOCS.md
+        jq -r '.parameters | to_entries[] | "- **\(.key)**: \(.value.metadata.description // "No description")"' azuredeploy.json >> ARM_TEMPLATE_DOCS.md
+        echo "" >> ARM_TEMPLATE_DOCS.md
+        echo "## Resources" >> ARM_TEMPLATE_DOCS.md
+        jq -r '.resources[] | "- \(.type) (\(.apiVersion))"' azuredeploy.json >> ARM_TEMPLATE_DOCS.md
+        
+    - name: Commit documentation
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add ARM_TEMPLATE_DOCS.md
+        git diff --staged --quiet || git commit -m "Auto-update ARM template documentation"
+        git push

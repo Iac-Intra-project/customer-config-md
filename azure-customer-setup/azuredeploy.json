@@ -1,0 +1,118 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Platform Team Crossplane Setup - 고객 구독에 필요한 권한 및 리소스 공급자 설정"
+  },
+  "parameters": {
+    "servicePrincipalObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "플랫폼 팀 애플리케이션의 서비스 주체 Object ID"
+      }
+    },
+    "applicationClientId": {
+      "type": "string",
+      "defaultValue": "0dd41fa3-9db7-48cd-9892-6756399a3803",
+      "metadata": {
+        "description": "플랫폼 팀 애플리케이션의 Client ID"
+      }
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "defaultValue": "platform-setup-rg",
+      "metadata": {
+        "description": "리소스 그룹 이름"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "koreacentral",
+      "metadata": {
+        "description": "리소스 위치"
+      }
+    }
+  },
+  "variables": {
+    "contributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+    "roleAssignmentName": "[guid(subscription().id, parameters('servicePrincipalObjectId'), 'Contributor')]",
+    "resourceProviders": [
+      "Microsoft.Network",
+      "Microsoft.ContainerService"
+    ]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[variables('roleAssignmentName')]",
+      "properties": {
+        "roleDefinitionId": "[variables('contributorRoleDefinitionId')]",
+        "principalId": "[parameters('servicePrincipalObjectId')]",
+        "principalType": "ServicePrincipal",
+        "description": "Platform Team Crossplane access for customer subscription"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2021-04-01",
+      "name": "[parameters('resourceGroupName')]",
+      "location": "[parameters('location')]",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2021-04-01",
+      "name": "registerProviders",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "dependsOn": [
+        "[parameters('resourceGroupName')]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "resources": [
+            {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2020-10-01",
+              "name": "registerResourceProviders",
+              "location": "[parameters('location')]",
+              "kind": "AzureCLI",
+              "properties": {
+                "azCliVersion": "2.52.0",
+                "timeout": "PT10M",
+                "retentionInterval": "PT1H",
+                "scriptContent": "[concat('az provider register --namespace ', variables('resourceProviders')[0], ' --wait\naz provider register --namespace ', variables('resourceProviders')[1], ' --wait\necho \"Resource providers registered successfully\"')]",
+                "cleanupPreference": "Always"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "deploymentStatus": {
+      "type": "string",
+      "value": "Success"
+    },
+    "servicePrincipalObjectId": {
+      "type": "string",
+      "value": "[parameters('servicePrincipalObjectId')]"
+    },
+    "assignedRole": {
+      "type": "string",
+      "value": "Contributor"
+    },
+    "registeredProviders": {
+      "type": "array",
+      "value": "[variables('resourceProviders')]"
+    },
+    "subscriptionId": {
+      "type": "string",
+      "value": "[subscription().subscriptionId]"
+    }
+  }
+}

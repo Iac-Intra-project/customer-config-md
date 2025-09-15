@@ -1,0 +1,157 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "플랫폼 팀이 Crossplane을 통해 고객 구독을 관리할 수 있도록 필요한 권한과 리소스 공급자를 설정합니다.",
+        "subscription": {
+          "constraints": {
+            "validations": [
+              {
+                "permission": "Microsoft.Authorization/roleAssignments/write",
+                "message": "역할 할당 권한이 필요합니다."
+              }
+            ]
+          }
+        },
+        "resourceGroup": {
+          "constraints": {
+            "validations": [
+              {
+                "permission": "Microsoft.Resources/deployments/write",
+                "message": "배포 권한이 필요합니다."
+              }
+            ]
+          }
+        },
+        "location": {
+          "visible": true,
+          "allowedValues": [
+            "Korea Central",
+            "Korea South",
+            "East Asia",
+            "Southeast Asia",
+            "East US",
+            "West US 2"
+          ]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "platformInfo",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": true,
+        "options": {
+          "icon": "Info",
+          "text": "이 템플릿을 배포하기 전에 관리자 동의를 완료해야 합니다. 아래 링크를 클릭하여 동의를 완료한 후 배포를 진행하세요.",
+          "uri": "https://login.microsoftonline.com/ab2773f0-5bcf-42c6-8b33-94ea19af0463/adminconsent?client_id=0dd41fa3-9db7-48cd-9892-6756399a3803"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "platformSettings",
+        "label": "플랫폼 설정",
+        "elements": [
+          {
+            "name": "servicePrincipalObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "서비스 주체 Object ID",
+            "placeholder": "예: 12345678-1234-1234-1234-123456789012",
+            "toolTip": "플랫폼 팀 애플리케이션의 서비스 주체 Object ID를 입력하세요. Azure Portal > Azure Active Directory > Enterprise applications에서 확인할 수 있습니다.",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "올바른 GUID 형식을 입력하세요."
+            },
+            "visible": true
+          },
+          {
+            "name": "applicationClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "애플리케이션 Client ID",
+            "defaultValue": "0dd41fa3-9db7-48cd-9892-6756399a3803",
+            "toolTip": "플랫폼 팀 애플리케이션의 Client ID입니다.",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "올바른 GUID 형식을 입력하세요."
+            },
+            "visible": true
+          },
+          {
+            "name": "adminConsentSection",
+            "type": "Microsoft.Common.Section",
+            "label": "관리자 동의 확인",
+            "elements": [
+              {
+                "name": "adminConsentInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Warning",
+                  "text": "배포를 진행하기 전에 관리자 동의를 완료했는지 확인하세요. 동의가 완료되지 않으면 배포가 실패할 수 있습니다."
+                }
+              },
+              {
+                "name": "adminConsentConfirm",
+                "type": "Microsoft.Common.OptionsGroup",
+                "label": "관리자 동의를 완료했습니까?",
+                "defaultValue": "No",
+                "toolTip": "관리자 동의 링크를 통해 동의 프로세스를 완료했는지 확인하세요.",
+                "constraints": {
+                  "allowedValues": [
+                    {
+                      "label": "예, 관리자 동의를 완료했습니다",
+                      "value": "Yes"
+                    },
+                    {
+                      "label": "아니오, 아직 완료하지 않았습니다",
+                      "value": "No"
+                    }
+                  ],
+                  "required": true
+                },
+                "visible": true
+              }
+            ],
+            "visible": true
+          }
+        ]
+      },
+      {
+        "name": "additionalSettings",
+        "label": "추가 설정",
+        "elements": [
+          {
+            "name": "resourceProviders",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "다음 리소스 공급자가 자동으로 등록됩니다: Microsoft.Network, Microsoft.ContainerService"
+            }
+          },
+          {
+            "name": "roleAssignment",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "플랫폼 팀 서비스 주체에 구독 범위의 Contributor 역할이 할당됩니다."
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "servicePrincipalObjectId": "[steps('platformSettings').servicePrincipalObjectId]",
+      "applicationClientId": "[steps('platformSettings').applicationClientId]",
+      "location": "[location()]"
+    }
+  }
+}
